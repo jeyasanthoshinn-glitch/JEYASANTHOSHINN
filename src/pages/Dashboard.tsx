@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BedDouble, 
-  Grid3X3, 
-  Users, 
-  ShoppingBag, 
-  Package, 
-  Receipt, 
+import {
+  BedDouble,
+  Grid3X3,
+  Users,
+  ShoppingBag,
+  Package,
+  Receipt,
   LogOut,
   TrendingUp,
   Calendar,
   DollarSign,
   Wallet,
-  CreditCard
+  CreditCard,
+  CalendarCheck
 } from 'lucide-react';
 import { db } from '../firebase/config';
 import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
@@ -29,12 +30,10 @@ import {
 
 const features = [
   { icon: BedDouble, label: 'Rooms', path: '/rooms', color: 'bg-blue-500' },
-  { icon: Grid3X3, label: 'Room Matrix', path: '/rooms/matrix', color: 'bg-indigo-500' },
-  { icon: Users, label: 'Booked Rooms', path: '/booked-rooms', color: 'bg-purple-500' },
-  { icon: ShoppingBag, label: 'Shop', path: '/shop', color: 'bg-pink-500' },
-  { icon: Package, label: 'Inventory', path: '/inventory', color: 'bg-yellow-500' },
-  { icon: Receipt, label: 'Payment Logs', path: '/payments', color: 'bg-green-500' },
-  { icon: LogOut, label: 'Checkout', path: '/checkout', color: 'bg-red-500' },
+  { icon: Grid3X3, label: 'Room Matrix', path: '/rooms/matrix', color: 'bg-blue-600' },
+  { icon: Users, label: 'Booked Rooms', path: '/booked-rooms', color: 'bg-green-500' },
+  { icon: CalendarCheck, label: 'Advance Bookings', path: '/advance-bookings', color: 'bg-orange-500' },
+  { icon: Receipt, label: 'Payment Logs', path: '/payments', color: 'bg-teal-500' },
 ];
 
 const Dashboard = () => {

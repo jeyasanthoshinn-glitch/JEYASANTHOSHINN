@@ -1,16 +1,17 @@
 import React, { useEffect,useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  BedDouble, 
-  Grid3X3, 
-  Users, 
-  ShoppingBag, 
-  Package, 
-  Receipt, 
-  LogOut, 
-  Menu, 
-  X 
+import {
+  LayoutDashboard,
+  BedDouble,
+  Grid3X3,
+  Users,
+  ShoppingBag,
+  Package,
+  Receipt,
+  LogOut,
+  Menu,
+  X,
+  CalendarCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,7 +38,7 @@ const DashboardLayout = () => {
     { name: 'Rooms', href: '/rooms', icon: BedDouble },
     { name: 'Room Matrix', href: '/rooms/matrix', icon: Grid3X3 },
     { name: 'Booked Rooms', href: '/booked-rooms', icon: Users },
-    //{ name: 'Checkout', href: '/checkout', icon: LogOut },
+    { name: 'Advance Bookings', href: '/advance-bookings', icon: CalendarCheck },
     { name: 'Payments', href: '/payments', icon: Receipt },
   ];
 

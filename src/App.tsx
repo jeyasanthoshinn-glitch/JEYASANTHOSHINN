@@ -14,12 +14,13 @@ import RoomMatrix from './pages/rooms/RoomMatrix';
 import AddRoom from './pages/rooms/AddRoom';
 import EditRoom from './pages/rooms/EditRoom';
 import CheckIn from './pages/bookings/CheckIn';
-//import Checkout from './pages/bookings/Checkout';
 import Inventory from './pages/inventory/Inventory';
 import AddInventory from './pages/inventory/AddInventory';
 import PaymentLogs from './pages/payments/PaymentsPage';
 import Shop from './pages/shop/Shop';
 import BookedRooms from './pages/bookings/BookedRooms';
+import AdvanceBooking from './pages/bookings/AdvanceBooking';
+import AdvanceBookingsList from './pages/bookings/AdvanceBookingsList';
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
@@ -44,6 +45,8 @@ function App() {
             <Route path="rooms/edit/:roomId" element={<EditRoom />} />
             <Route path="booked-rooms" element={<BookedRooms />} />
             <Route path="check-in/:roomId" element={<CheckIn />} />
+            <Route path="advance-bookings" element={<AdvanceBookingsList />} />
+            <Route path="advance-booking/new" element={<AdvanceBooking />} />
             <Route path="payments" element={<PaymentLogs />} />
           </Route>
           
