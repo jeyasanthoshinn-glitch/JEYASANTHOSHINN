@@ -21,6 +21,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
   const { logout, currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -30,6 +32,22 @@ const DashboardLayout = () => {
       navigate('/login');
     } catch (error) {
       console.error('Failed to log out', error);
+    }
+  };
+
+  const handlePaymentsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput === '1234') {
+      setShowPasswordModal(false);
+      setPasswordInput('');
+      navigate('/payments');
+    } else {
+      alert('Incorrect password');
+      setPasswordInput('');
     }
   };
 
@@ -80,21 +98,35 @@ const DashboardLayout = () => {
               <div className="mt-8 flex-1 h-0 overflow-y-auto">
                 <nav className="px-2 space-y-1">
                   {navigation.map((item) => (
-                    <NavLink
-                      key={item.name}
-                      to={item.href}
-                      className={({ isActive }) =>
-                        `flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 ${
-                          isActive
-                            ? 'bg-blue-800 text-white'
-                            : 'text-blue-100 hover:bg-blue-800'
-                        }`
-                      }
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
-                      {item.name}
-                    </NavLink>
+                    item.name === 'Payments' ? (
+                      <button
+                        key={item.name}
+                        onClick={(e) => {
+                          setSidebarOpen(false);
+                          handlePaymentsClick(e);
+                        }}
+                        className="w-full flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 text-blue-100 hover:bg-blue-800"
+                      >
+                        <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
+                        {item.name}
+                      </button>
+                    ) : (
+                      <NavLink
+                        key={item.name}
+                        to={item.href}
+                        className={({ isActive }) =>
+                          `flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 ${
+                            isActive
+                              ? 'bg-blue-800 text-white'
+                              : 'text-blue-100 hover:bg-blue-800'
+                          }`
+                        }
+                        onClick={() => setSidebarOpen(false)}
+                      >
+                        <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
+                        {item.name}
+                      </NavLink>
+                    )
                   ))}
                   <button
                     onClick={handleLogout}
@@ -120,20 +152,31 @@ const DashboardLayout = () => {
               </div>
               <div className="mt-8 flex-1 px-2 space-y-1">
                 {navigation.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    to={item.href}
-                    className={({ isActive }) =>
-                      `flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 ${
-                        isActive
-                          ? 'bg-blue-800 text-white'
-                          : 'text-blue-100 hover:bg-blue-800'
-                      }`
-                    }
-                  >
-                    <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
-                    {item.name}
-                  </NavLink>
+                  item.name === 'Payments' ? (
+                    <button
+                      key={item.name}
+                      onClick={handlePaymentsClick}
+                      className="w-full flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 text-blue-100 hover:bg-blue-800"
+                    >
+                      <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
+                      {item.name}
+                    </button>
+                  ) : (
+                    <NavLink
+                      key={item.name}
+                      to={item.href}
+                      className={({ isActive }) =>
+                        `flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-200 ${
+                          isActive
+                            ? 'bg-blue-800 text-white'
+                            : 'text-blue-100 hover:bg-blue-800'
+                        }`
+                      }
+                    >
+                      <item.icon className="mr-3 h-6 w-6 flex-shrink-0" />
+                      {item.name}
+                    </NavLink>
+                  )
                 ))}
                 <button
                   onClick={handleLogout}
@@ -164,6 +207,46 @@ const DashboardLayout = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+          >
+            <h2 className="text-xl font-bold mb-4">Password Required</h2>
+            <p className="text-gray-600 mb-4">Enter password to access Payments</p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter password"
+              autoFocus
+            />
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordInput('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Submit
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

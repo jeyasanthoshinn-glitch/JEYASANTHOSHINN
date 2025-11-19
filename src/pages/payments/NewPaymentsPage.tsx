@@ -35,6 +35,8 @@ const NewPaymentsPage: React.FC = () => {
   const [pendingGpay, setPendingGpay] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
 
   useEffect(() => {
     fetchAllData();
@@ -130,27 +132,61 @@ const NewPaymentsPage: React.FC = () => {
 
   const calculatePendingAmounts = async () => {
     try {
+      const logsQuery = query(
+        collection(db, 'collection_logs'),
+        firestoreOrderBy('collectedAt', 'desc')
+      );
+      const logsSnapshot = await getDocs(logsQuery);
+      const logs = logsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as CollectionLog[];
+
+      const lastCollectionDate = logs.length > 0 && logs[0].collectedAt
+        ? logs[0].collectedAt.toDate()
+        : null;
+
       const checkinsSnapshot = await getDocs(collection(db, 'checkins'));
       let totalPendingCash = 0;
       let totalPendingGpay = 0;
 
       for (const checkinDoc of checkinsSnapshot.docs) {
-        const checkinData = checkinDoc.data();
         const paymentsSnapshot = await getDocs(collection(db, 'checkins', checkinDoc.id, 'payments'));
 
         paymentsSnapshot.docs.forEach(payDoc => {
           const payment = payDoc.data();
           const amount = parseFloat(payment.amount) || 0;
+          const paymentDate = payment.timestamp?.toDate ? payment.timestamp.toDate() : null;
 
-          if (amount > 0 && payment.type !== 'collected') {
-            if (payment.mode === 'cash') {
-              totalPendingCash += amount;
-            } else if (payment.mode === 'gpay') {
-              totalPendingGpay += amount;
+          if (amount > 0) {
+            if (!lastCollectionDate || (paymentDate && paymentDate > lastCollectionDate)) {
+              if (payment.mode === 'cash') {
+                totalPendingCash += amount;
+              } else if (payment.mode === 'gpay') {
+                totalPendingGpay += amount;
+              }
             }
           }
         });
       }
+
+      const directPaymentsSnapshot = await getDocs(collection(db, 'payments'));
+      directPaymentsSnapshot.docs.forEach(payDoc => {
+        const payment = payDoc.data();
+        const amount = parseFloat(payment.amount) || 0;
+        const paymentDate = payment.timestamp?.toDate ? payment.timestamp.toDate() : null;
+
+        if (amount > 0) {
+          if (!lastCollectionDate || (paymentDate && paymentDate > lastCollectionDate)) {
+            const mode = payment.paymentMode || payment.mode;
+            if (mode === 'cash') {
+              totalPendingCash += amount;
+            } else if (mode === 'gpay') {
+              totalPendingGpay += amount;
+            }
+          }
+        }
+      });
 
       setPendingCash(totalPendingCash);
       setPendingGpay(totalPendingGpay);
@@ -159,13 +195,25 @@ const NewPaymentsPage: React.FC = () => {
     }
   };
 
-  const handleCollect = async () => {
+  const handleCollectClick = () => {
     if (pendingCash === 0 && pendingGpay === 0) {
       toast.info('No pending amounts to collect');
       return;
     }
+    setShowPasswordModal(true);
+  };
 
+  const handlePasswordSubmit = async () => {
+    if (passwordInput !== '1234') {
+      toast.error('Incorrect password');
+      setPasswordInput('');
+      return;
+    }
+
+    setShowPasswordModal(false);
+    setPasswordInput('');
     setIsCollecting(true);
+
     try {
       await addDoc(collection(db, 'collection_logs'), {
         cashAmount: pendingCash,
@@ -175,9 +223,7 @@ const NewPaymentsPage: React.FC = () => {
       });
 
       toast.success('Collection recorded successfully');
-      setPendingCash(0);
-      setPendingGpay(0);
-      fetchCollectionLogs();
+      await fetchAllData();
     } catch (error) {
       console.error('Error recording collection:', error);
       toast.error('Failed to record collection');
@@ -324,7 +370,7 @@ const NewPaymentsPage: React.FC = () => {
                   </p>
                 </div>
                 <button
-                  onClick={handleCollect}
+                  onClick={handleCollectClick}
                   disabled={isCollecting || (pendingCash === 0 && pendingGpay === 0)}
                   className="w-full py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
                 >
@@ -546,7 +592,11 @@ const NewPaymentsPage: React.FC = () => {
               <div className="p-4 border-b">
                 <h2 className="text-lg font-semibold flex items-center">
                   <Clock className="h-5 w-5 mr-2 text-gray-600" />
-                  Collection Activity Logs
+                  Collection Activity Logs for {selectedDate.toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
                 </h2>
               </div>
 
@@ -569,38 +619,97 @@ const NewPaymentsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {collectionLogs.map((log) => {
-                      const timestamp = log.collectedAt?.toDate() || new Date();
+                    {collectionLogs
+                      .filter(log => {
+                        const logDate = log.collectedAt?.toDate() || new Date();
+                        return (
+                          logDate.getDate() === selectedDate.getDate() &&
+                          logDate.getMonth() === selectedDate.getMonth() &&
+                          logDate.getFullYear() === selectedDate.getFullYear()
+                        );
+                      })
+                      .map((log) => {
+                        const timestamp = log.collectedAt?.toDate() || new Date();
 
+                        return (
+                          <tr key={log.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {timestamp.toLocaleString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                              ₹{log.cashAmount.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-medium">
+                              ₹{log.gpayAmount.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600 font-bold">
+                              ₹{log.totalAmount.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {collectionLogs.filter(log => {
+                      const logDate = log.collectedAt?.toDate() || new Date();
                       return (
-                        <tr key={log.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {timestamp.toLocaleString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
-                            ₹{log.cashAmount.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-medium">
-                            ₹{log.gpayAmount.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600 font-bold">
-                            ₹{log.totalAmount.toFixed(2)}
-                          </td>
-                        </tr>
+                        logDate.getDate() === selectedDate.getDate() &&
+                        logDate.getMonth() === selectedDate.getMonth() &&
+                        logDate.getFullYear() === selectedDate.getFullYear()
                       );
-                    })}
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
+                          No collection activity for this date
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
         </>
+      )}
+
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Password Required</h2>
+            <p className="text-gray-600 mb-4">Enter password to collect payments</p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter password"
+              autoFocus
+            />
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordInput('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

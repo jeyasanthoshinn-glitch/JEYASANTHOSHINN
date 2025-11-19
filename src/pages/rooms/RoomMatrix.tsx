@@ -76,6 +76,7 @@ const RoomMatrix = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [stayValidUntil, setStayValidUntil] = useState<Record<string, string>>({});
+  const [pendingAmounts, setPendingAmounts] = useState<Record<string, number>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -135,18 +136,18 @@ const RoomMatrix = () => {
     setLoading(true);
     try {
       const roomsSnapshot = await getDocs(collection(db, 'rooms'));
-      const roomList = roomsSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const roomList = roomsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       })) as Room[];
-      
+
       roomList.sort((a, b) => parseInt(a.roomNumber.toString()) - parseInt(b.roomNumber.toString()));
 
       const checkinQuery = query(collection(db, 'checkins'), where('isCheckedOut', '==', false));
       const checkinSnapshot = await getDocs(checkinQuery);
-      const activeBookings = checkinSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const activeBookings = checkinSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       })) as Booking[];
 
       const bookingsWithRoomNumber = await Promise.all(
@@ -164,21 +165,55 @@ const RoomMatrix = () => {
         return booking ? { ...room, status: 'occupied' as const } : room;
       });
 
-      const uniqueFloors = [...new Set(updatedRooms.map(r => r.floor))].sort((a, b) => 
+      const uniqueFloors = [...new Set(updatedRooms.map(r => r.floor))].sort((a, b) =>
         parseInt(a) - parseInt(b)
       );
-      
+
       setRooms(updatedRooms);
       setFloors(uniqueFloors);
       setBookings(bookingsWithRoomNumber);
-      
-      // Update stay valid until after fetching data
+
       updateStayValidUntil();
+      await calculatePendingAmounts(activeBookings);
     } catch (error) {
       toast.error('Failed to fetch data');
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const calculatePendingAmounts = async (bookingsList: Booking[]) => {
+    try {
+      const pending: Record<string, number> = {};
+
+      for (const booking of bookingsList) {
+        const paymentsSnapshot = await getDocs(collection(db, 'checkins', booking.id, 'payments'));
+        const payments = paymentsSnapshot.docs.map(doc => doc.data());
+
+        const shopPurchasesSnapshot = await getDocs(
+          query(collection(db, 'purchases'), where('checkinId', '==', booking.id))
+        );
+        const purchases = shopPurchasesSnapshot.docs.map(doc => doc.data());
+
+        let totalRent = booking.rent;
+        payments.forEach(p => {
+          if (p.type === 'extension') {
+            totalRent += p.amount;
+          }
+        });
+
+        const shopTotal = purchases.reduce((sum, p) => sum + (p.amount || 0), 0);
+        totalRent += shopTotal;
+
+        const totalPaid = booking.initialPayment || 0;
+
+        pending[booking.id] = Math.max(0, totalRent - totalPaid);
+      }
+
+      setPendingAmounts(pending);
+    } catch (error) {
+      console.error('Error calculating pending amounts:', error);
     }
   };
 
@@ -471,17 +506,15 @@ const RoomMatrix = () => {
 
   const getTimeRemainingColor = (validUntil: string) => {
     if (!validUntil) return 'text-gray-600';
-    
+
     const now = new Date();
     const validUntilDate = new Date(validUntil);
-    
-    // If the date is invalid, return default color
+
     if (isNaN(validUntilDate.getTime())) return 'text-gray-600';
-    
+
     const hoursRemaining = (validUntilDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-    
+
     if (hoursRemaining < 0) return 'text-red-600';
-    if (hoursRemaining < 2) return 'text-red-600';
     if (hoursRemaining < 6) return 'text-amber-600';
     return 'text-green-600';
   };
@@ -794,24 +827,31 @@ const RoomMatrix = () => {
                       </div>
                       <div className="font-bold text-lg">{room.roomNumber}</div>
                       <div className="text-xs uppercase">{room.type}</div>
-                      
+
                       {room.status === 'occupied' && booking && (
-                        <div className="mt-1 flex justify-center">
-                          <div className={`text-xs font-medium flex items-center ${getTimeRemainingColor(stayValidUntil[booking.id] || '')}`}>
-                            <Clock className="h-3 w-3 mr-1" />
-                            {stayValidUntil[booking.id] ? stayValidUntil[booking.id].split(',')[0] : '...'}
+                        <>
+                          <div className="mt-1 flex justify-center">
+                            <div className={`text-xs font-medium flex items-center ${getTimeRemainingColor(stayValidUntil[booking.id] || '')}`}>
+                              <Clock className="h-3 w-3 mr-1" />
+                              {stayValidUntil[booking.id] ? stayValidUntil[booking.id].split(',')[0] : '...'}
+                            </div>
                           </div>
-                        </div>
+                          {pendingAmounts[booking.id] > 0 && (
+                            <div className="mt-1 text-xs font-semibold text-red-600">
+                              Pending: ₹{pendingAmounts[booking.id].toFixed(0)}
+                            </div>
+                          )}
+                        </>
                       )}
-                      
+
                       {room.status === 'occupied' && (
                         <div className="absolute top-2 right-2">
                           {(() => {
                             const booking = getBookingByRoomId(room.id);
-                            if (booking && booking.initialPayment < booking.rent) {
+                            if (booking && pendingAmounts[booking.id] > 0) {
                               return (
-                                <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center" 
-                                     title="Has pending balance">
+                                <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center"
+                                     title={`Pending: ₹${pendingAmounts[booking.id].toFixed(0)}`}>
                                   <span className="text-white text-xs">₹</span>
                                 </div>
                               );
