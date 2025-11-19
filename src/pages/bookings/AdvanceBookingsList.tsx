@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase/config';
-import { collection, getDocs, doc, updateDoc, addDoc, Timestamp, query, orderBy } from 'firebase/firestore';
-import { Plus, Calendar, Phone, CreditCard, XCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { collection, getDocs, doc, updateDoc, addDoc, Timestamp, query, where, orderBy } from 'firebase/firestore';
+import { Plus, Calendar, Phone, CreditCard, XCircle, Search, Check, History, Users, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+
+type Room = {
+  id: string;
+  roomNumber: number;
+  floor: string;
+  type: string;
+  status: string;
+};
 
 type RoomDetail = {
   roomId: string;
   roomNumber: number;
-  price: number;
-  persons: number;
 };
 
 type AdvanceBooking = {
@@ -21,12 +27,14 @@ type AdvanceBooking = {
   date_of_booking: string;
   room_type: string;
   number_of_rooms: number;
+  price_per_room: number;
   advance_amount: number;
   payment_mode?: string;
   rooms: RoomDetail[];
   status: string;
   created_at: any;
   cancelled_at: any;
+  completed_at: any;
   refund_amount: number;
   refund_mode?: string;
 };
@@ -34,42 +42,48 @@ type AdvanceBooking = {
 const AdvanceBookingsList = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<AdvanceBooking[]>([]);
-  const [filteredBookings, setFilteredBookings] = useState<AdvanceBooking[]>([]);
+  const [historyBookings, setHistoryBookings] = useState<AdvanceBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [cancelModal, setCancelModal] = useState<{
     show: boolean;
     booking: AdvanceBooking | null;
   }>({ show: false, booking: null });
+  const [bookModal, setBookModal] = useState<{
+    show: boolean;
+    booking: AdvanceBooking | null;
+  }>({ show: false, booking: null });
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
   const [refundAmount, setRefundAmount] = useState('');
   const [refundMode, setRefundMode] = useState<'cash' | 'gpay'>('cash');
   const [processing, setProcessing] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
 
   useEffect(() => {
     fetchBookings();
   }, []);
 
-  useEffect(() => {
-    filterBookings();
-  }, [searchQuery, bookings]);
-
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const bookingsQuery = query(
-        collection(db, 'advance_bookings'),
-        orderBy('date_of_booking', 'asc')
-      );
-      const bookingsSnapshot = await getDocs(bookingsQuery);
-      const bookingsList = bookingsSnapshot.docs.map(doc => ({
+      const bookingsSnapshot = await getDocs(collection(db, 'advance_bookings'));
+      const allBookings = bookingsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as AdvanceBooking[];
 
-      setBookings(bookingsList);
-      setFilteredBookings(bookingsList);
+      const activeBookings = allBookings.filter(b => b.status === 'pending');
+      const completedOrCancelled = allBookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
+
+      activeBookings.sort((a, b) => a.date_of_booking.localeCompare(b.date_of_booking));
+      completedOrCancelled.sort((a, b) => {
+        const aTime = b.completed_at || b.cancelled_at;
+        const bTime = a.completed_at || a.cancelled_at;
+        return (aTime?.seconds || 0) - (bTime?.seconds || 0);
+      });
+
+      setBookings(activeBookings);
+      setHistoryBookings(completedOrCancelled);
     } catch (error) {
       console.error('Error fetching bookings:', error);
       toast.error('Failed to fetch bookings');
@@ -78,22 +92,91 @@ const AdvanceBookingsList = () => {
     }
   };
 
-  const filterBookings = () => {
-    if (!searchQuery.trim()) {
-      setFilteredBookings(bookings);
+  const handleBookClick = async (booking: AdvanceBooking) => {
+    setProcessing(true);
+    try {
+      const roomsSnapshot = await getDocs(collection(db, 'rooms'));
+      const allRooms = roomsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Room[];
+
+      const checkinsQuery = query(
+        collection(db, 'checkins'),
+        where('isCheckedOut', '==', false)
+      );
+      const checkinsSnapshot = await getDocs(checkinsQuery);
+
+      const occupiedRoomIds = new Set<string>();
+      checkinsSnapshot.docs.forEach(doc => {
+        occupiedRoomIds.add(doc.data().roomId);
+      });
+
+      const availableRoomsList = allRooms.filter(room =>
+        !occupiedRoomIds.has(room.id) &&
+        room.status === 'available' &&
+        room.type.toLowerCase() === booking.room_type.toLowerCase().replace(' ', '-')
+      );
+
+      availableRoomsList.sort((a, b) => a.roomNumber - b.roomNumber);
+
+      setAvailableRooms(availableRoomsList);
+      setBookModal({ show: true, booking });
+      setSelectedRooms([]);
+    } catch (error) {
+      console.error('Error fetching available rooms:', error);
+      toast.error('Failed to fetch available rooms');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRoomSelect = (roomId: string) => {
+    if (selectedRooms.includes(roomId)) {
+      setSelectedRooms(selectedRooms.filter(id => id !== roomId));
+    } else {
+      if (selectedRooms.length < (bookModal.booking?.number_of_rooms || 0)) {
+        setSelectedRooms([...selectedRooms, roomId]);
+      } else {
+        toast.warning(`You can only select ${bookModal.booking?.number_of_rooms} room(s)`);
+      }
+    }
+  };
+
+  const confirmBooking = async () => {
+    if (!bookModal.booking) return;
+
+    if (selectedRooms.length !== bookModal.booking.number_of_rooms) {
+      toast.error(`Please select exactly ${bookModal.booking.number_of_rooms} room(s)`);
       return;
     }
 
-    const query = searchQuery.toLowerCase();
-    const filtered = bookings.filter(booking =>
-      booking.name.toLowerCase().includes(query) ||
-      booking.mobile.includes(query) ||
-      booking.date_of_booking.includes(query) ||
-      booking.rooms.some(room => room.roomNumber.toString().includes(query))
-    );
+    setProcessing(true);
+    try {
+      const roomDetails = selectedRooms.map(roomId => {
+        const room = availableRooms.find(r => r.id === roomId);
+        return {
+          roomId: room!.id,
+          roomNumber: room!.roomNumber
+        };
+      });
 
-    setFilteredBookings(filtered);
-    setCurrentPage(1);
+      await updateDoc(doc(db, 'advance_bookings', bookModal.booking.id), {
+        status: 'completed',
+        rooms: roomDetails,
+        completed_at: Timestamp.now()
+      });
+
+      toast.success('Rooms assigned successfully!');
+      setBookModal({ show: false, booking: null });
+      setSelectedRooms([]);
+      fetchBookings();
+    } catch (error) {
+      console.error('Error confirming booking:', error);
+      toast.error('Failed to confirm booking');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleCancelBooking = (booking: AdvanceBooking) => {
@@ -131,14 +214,13 @@ const AdvanceBookingsList = () => {
           amount: -refund,
           mode: refundMode,
           paymentMode: refundMode,
-          customer_name: cancelModal.booking.name,
+          customerName: cancelModal.booking.name,
           date_of_booking: cancelModal.booking.date_of_booking,
-          rooms: cancelModal.booking.rooms.map(r => r.roomNumber).join(', '),
           note: `Refund for cancelled advance booking - ${cancelModal.booking.name} (${cancelModal.booking.date_of_booking})`,
           timestamp: Timestamp.now(),
           paymentStatus: 'completed',
           description: `Refund via ${refundMode}`,
-          roomNumber: cancelModal.booking.rooms.map(r => r.roomNumber).join(', ')
+          roomNumber: 'Cancelled Booking'
         });
       }
 
@@ -155,32 +237,17 @@ const AdvanceBookingsList = () => {
     }
   };
 
-  const getTotalPrice = (rooms: RoomDetail[]) => {
-    return rooms.reduce((total, room) => total + room.price, 0);
+  const getTotalPrice = (booking: AdvanceBooking) => {
+    return booking.price_per_room * booking.number_of_rooms;
   };
 
-  const getStatusBadge = (status: string, dateOfBooking: string) => {
-    const bookingDate = new Date(dateOfBooking);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (status === 'cancelled') {
-      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Cancelled</span>;
-    }
-
-    if (bookingDate < today) {
-      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Past</span>;
-    }
-
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>;
-  };
-
-  const activeBookings = filteredBookings.filter(b => b.status === 'active');
-  const cancelledBookings = filteredBookings.filter(b => b.status === 'cancelled');
-
-  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedBookings = filteredBookings.slice(startIndex, startIndex + itemsPerPage);
+  const filteredBookings = searchQuery
+    ? bookings.filter(booking =>
+        booking.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.mobile.includes(searchQuery) ||
+        booking.date_of_booking.includes(searchQuery)
+      )
+    : bookings;
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -188,7 +255,7 @@ const AdvanceBookingsList = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Advance Bookings</h1>
           <p className="text-sm text-gray-600 mt-1">
-            {activeBookings.length} active, {cancelledBookings.length} cancelled
+            {bookings.length} pending bookings
           </p>
         </div>
         <button
@@ -205,7 +272,7 @@ const AdvanceBookingsList = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name, mobile, date, or room number..."
+            placeholder="Search by name, mobile, or date..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -220,7 +287,7 @@ const AdvanceBookingsList = () => {
       ) : filteredBookings.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md p-12 text-center">
           <Calendar className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 mb-2">No Bookings Found</h3>
+          <h3 className="text-xl font-medium text-gray-900 mb-2">No Pending Bookings</h3>
           <p className="text-gray-500 mb-6">
             {searchQuery ? 'No bookings match your search.' : 'Start by creating your first advance booking.'}
           </p>
@@ -235,15 +302,105 @@ const AdvanceBookingsList = () => {
           )}
         </div>
       ) : (
-        <>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Guest Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Booking Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Rooms & Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Amount Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredBookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{booking.name}</div>
+                      <div className="text-sm text-gray-500 flex items-center mt-1">
+                        <Phone className="h-3 w-3 mr-1" />
+                        {booking.mobile}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center text-sm text-gray-900">
+                        <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                        {new Date(booking.date_of_booking).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {booking.number_of_rooms} room(s)
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 capitalize">{booking.room_type}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        Total: ₹{getTotalPrice(booking).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-green-600 mt-1 flex items-center">
+                        <CreditCard className="h-3 w-3 mr-1" />
+                        Advance: ₹{booking.advance_amount.toFixed(2)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleBookClick(booking)}
+                          className="flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors duration-200"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          BOOK
+                        </button>
+                        <button
+                          onClick={() => handleCancelBooking(booking)}
+                          className="flex items-center px-3 py-1 text-red-600 hover:text-red-900 border border-red-600 rounded hover:bg-red-50 transition-colors duration-200"
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* History Section */}
+      {historyBookings.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center mb-6">
+            <History className="h-6 w-6 text-gray-600 mr-2" />
+            <h2 className="text-2xl font-bold text-gray-800">Booking History</h2>
+            <span className="ml-3 px-2 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">
+              {historyBookings.length}
+            </span>
+          </div>
+
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      S.No
-                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Guest Details
                     </th>
@@ -251,7 +408,7 @@ const AdvanceBookingsList = () => {
                       Booking Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Rooms
+                      Rooms Assigned
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Amount Details
@@ -260,16 +417,13 @@ const AdvanceBookingsList = () => {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
+                      Timestamp
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedBookings.map((booking, index) => (
+                  {historyBookings.map((booking) => (
                     <tr key={booking.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {startIndex + index + 1}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{booking.name}</div>
                         <div className="text-sm text-gray-500 flex items-center mt-1">
@@ -289,42 +443,57 @@ const AdvanceBookingsList = () => {
                         <div className="text-xs text-gray-500 mt-1 capitalize">{booking.room_type}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {booking.rooms.map(r => r.roomNumber).join(', ')}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {booking.number_of_rooms} room(s)
-                        </div>
+                        {booking.status === 'completed' && booking.rooms.length > 0 ? (
+                          <div className="text-sm text-gray-900">
+                            {booking.rooms.map(r => r.roomNumber).join(', ')}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500">Not Assigned</div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          Total: ₹{getTotalPrice(booking.rooms).toFixed(2)}
+                          Total: ₹{getTotalPrice(booking).toFixed(2)}
                         </div>
-                        <div className="text-xs text-green-600 mt-1 flex items-center">
-                          <CreditCard className="h-3 w-3 mr-1" />
-                          Advance: ₹{booking.advance_amount.toFixed(2)} ({booking.payment_mode || 'cash'})
+                        <div className="text-xs text-green-600 mt-1">
+                          Advance: ₹{booking.advance_amount.toFixed(2)}
                         </div>
                         {booking.status === 'cancelled' && booking.refund_amount > 0 && (
                           <div className="text-xs text-red-600 mt-1">
-                            Refunded: ₹{booking.refund_amount.toFixed(2)} ({booking.refund_mode || 'cash'})
+                            Refunded: ₹{booking.refund_amount.toFixed(2)}
                           </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(booking.status, booking.date_of_booking)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {booking.status === 'active' && (
-                          <button
-                            onClick={() => handleCancelBooking(booking)}
-                            className="flex items-center text-red-600 hover:text-red-900 transition-colors duration-200"
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Cancel
-                          </button>
+                        {booking.status === 'completed' ? (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                            Cancelled
+                          </span>
                         )}
-                        {booking.status === 'cancelled' && (
-                          <span className="text-gray-400 text-xs">No actions</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {booking.completed_at ? (
+                          new Date(booking.completed_at.toDate()).toLocaleString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        ) : booking.cancelled_at ? (
+                          new Date(booking.cancelled_at.toDate()).toLocaleString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        ) : (
+                          'N/A'
                         )}
                       </td>
                     </tr>
@@ -333,37 +502,111 @@ const AdvanceBookingsList = () => {
               </table>
             </div>
           </div>
-
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredBookings.length)} of{' '}
-                {filteredBookings.length} bookings
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <span className="text-sm text-gray-700">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
 
+      {/* Book Modal */}
+      <AnimatePresence>
+        {bookModal.show && bookModal.booking && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => !processing && setBookModal({ show: false, booking: null })}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-bold">Assign Rooms</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Select {bookModal.booking.number_of_rooms} room(s) for {bookModal.booking.name}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setBookModal({ show: false, booking: null })}
+                    disabled={processing}
+                    className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
+                  >
+                    <X className="h-6 w-6 text-gray-500" />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  {availableRooms.length} rooms available | Selected: {selectedRooms.length}/{bookModal.booking.number_of_rooms}
+                </p>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-180px)]">
+                {availableRooms.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Rooms Available</h3>
+                    <p className="text-gray-500">
+                      All rooms are currently occupied. Please try again later.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {availableRooms.map((room) => {
+                      const isSelected = selectedRooms.includes(room.id);
+                      return (
+                        <button
+                          key={room.id}
+                          onClick={() => handleRoomSelect(room.id)}
+                          className={`p-4 rounded-lg border-2 text-center transition-all duration-200 ${
+                            isSelected
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="text-2xl font-bold mb-1">{room.roomNumber}</div>
+                          <div className="text-xs text-gray-600">Floor {room.floor}</div>
+                          {isSelected && (
+                            <div className="mt-2 text-xs font-medium text-green-600">Selected</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                <button
+                  onClick={() => setBookModal({ show: false, booking: null })}
+                  disabled={processing}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBooking}
+                  disabled={processing || selectedRooms.length !== bookModal.booking.number_of_rooms}
+                  className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center"
+                >
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    'Confirm Booking'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Cancel Modal */}
       <AnimatePresence>
         {cancelModal.show && cancelModal.booking && (
           <motion.div
@@ -402,12 +645,6 @@ const AdvanceBookingsList = () => {
                     <span className="text-gray-600">Date:</span>
                     <span className="font-medium">
                       {new Date(cancelModal.booking.date_of_booking).toLocaleDateString('en-IN')}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Rooms:</span>
-                    <span className="font-medium">
-                      {cancelModal.booking.rooms.map(r => r.roomNumber).join(', ')}
                     </span>
                   </div>
                   <div className="flex justify-between">
