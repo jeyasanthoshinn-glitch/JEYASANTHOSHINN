@@ -342,10 +342,8 @@ const RoomMatrix = () => {
   };
 
   const handleAddPayment = async (bookingId: string) => {
-    const amount = parseFloat(prompt('Enter amount to add:') || '0');
-    if (!amount || amount <= 0) return;
-    
-    setPaymentAmount(amount.toString());
+    setPaymentAmount('');
+    setPaymentMode(null);
     setShowPaymentModal(true);
   };
 
@@ -716,6 +714,7 @@ const RoomMatrix = () => {
                           if (booking) {
                             setSelectedBooking(booking);
                             fetchPaymentHistory(booking.id);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           }
                         } else if (room.status === 'extension') {
                           const booking = getBookingByRoomId(room.id);
@@ -892,42 +891,97 @@ const RoomMatrix = () => {
 
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Select Payment Mode</h2>
-            <p className="mb-4">Amount: ₹{paymentAmount}</p>
-            
-            <div className="flex gap-4 mb-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full"
+          >
+            <h2 className="text-xl font-bold mb-4">Add Payment</h2>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Payment Amount (₹)
+              </label>
+              <input
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="Enter amount"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+
+            {paymentAmount && parseFloat(paymentAmount) > 0 ? (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setPaymentMode('cash')}
+                    className={`py-3 px-4 rounded-lg font-medium transition-all ${
+                      paymentMode === 'cash'
+                        ? 'bg-green-600 text-white ring-2 ring-offset-2 ring-green-600'
+                        : 'bg-green-50 text-green-700 border-2 border-green-200 hover:bg-green-100'
+                    }`}
+                  >
+                    Cash
+                  </button>
+                  <button
+                    onClick={() => setPaymentMode('gpay')}
+                    className={`py-3 px-4 rounded-lg font-medium transition-all ${
+                      paymentMode === 'gpay'
+                        ? 'bg-blue-600 text-white ring-2 ring-offset-2 ring-blue-600'
+                        : 'bg-blue-50 text-blue-700 border-2 border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    GPay
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {paymentAmount && parseFloat(paymentAmount) > 0 && paymentMode ? (
+              <div className="mb-6 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-2">Confirm Payment Details:</p>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-medium">₹{parseFloat(paymentAmount).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Method:</span>
+                    <span className="font-medium capitalize">{paymentMode}</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setPaymentMode('cash');
-                  processPayment(selectedBooking!.id);
+                  setShowPaymentModal(false);
+                  setPaymentMode(null);
+                  setPaymentAmount('');
                 }}
-                className="flex-1 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="flex-1 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
               >
-                Cash
+                Cancel
               </button>
               <button
                 onClick={() => {
-                  setPaymentMode('gpay');
-                  processPayment(selectedBooking!.id);
+                  if (paymentAmount && paymentMode) {
+                    processPayment(selectedBooking!.id);
+                  }
                 }}
-                className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={!paymentAmount || !paymentMode || parseFloat(paymentAmount) <= 0}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                GPay
+                Confirm Payment
               </button>
             </div>
-            
-            <button
-              onClick={() => {
-                setShowPaymentModal(false);
-                setPaymentMode(null);
-                setPaymentAmount('');
-              }}
-              className="w-full py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>
