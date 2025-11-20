@@ -21,6 +21,7 @@ import Shop from './pages/shop/Shop';
 import BookedRooms from './pages/bookings/BookedRooms';
 import AdvanceBooking from './pages/bookings/AdvanceBooking';
 import AdvanceBookingsList from './pages/bookings/AdvanceBookingsList';
+import HousePage from './pages/houses/HousePage';
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
@@ -48,6 +49,7 @@ function App() {
             <Route path="advance-bookings" element={<AdvanceBookingsList />} />
             <Route path="advance-booking/new" element={<AdvanceBooking />} />
             <Route path="payments" element={<PaymentLogs />} />
+            <Route path="houses" element={<HousePage />} />
           </Route>
           
           <Route path="*" element={<Navigate to="/" replace />} />

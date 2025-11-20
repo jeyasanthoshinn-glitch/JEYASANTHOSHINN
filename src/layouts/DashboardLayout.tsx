@@ -11,7 +11,8 @@ import {
   LogOut,
   Menu,
   X,
-  CalendarCheck
+  CalendarCheck,
+  Home
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,6 +56,7 @@ const DashboardLayout = () => {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Rooms', href: '/rooms', icon: BedDouble },
     { name: 'Room Matrix', href: '/rooms/matrix', icon: Grid3X3 },
+    { name: 'Houses', href: '/houses', icon: Home },
     { name: 'Booked Rooms', href: '/booked-rooms', icon: Users },
     { name: 'Advance Bookings', href: '/advance-bookings', icon: CalendarCheck },
     { name: 'Payments', href: '/payments', icon: Receipt },

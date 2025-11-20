@@ -18,6 +18,7 @@ import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { ShopPurchaseService } from '../shop/ShopPurchaseService';
 import { DataService } from '../../services/dataService';
+import RoomMatrixSummary from '../../components/RoomMatrixSummary';
 
 type Room = {
   id: string;
@@ -546,6 +547,8 @@ const RoomMatrix = () => {
   return (
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Room Matrix</h1>
+
+      <RoomMatrixSummary />
 
       {selectedBooking && (
         <div className="bg-white shadow p-6 rounded-lg mb-6">
