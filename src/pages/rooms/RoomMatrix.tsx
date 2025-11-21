@@ -767,7 +767,7 @@ const RoomMatrix = () => {
                           </div>
                           {pendingAmounts[booking.id] > 0 && (
                             <div className="mt-1 text-xs font-semibold text-red-600">
-                              Pending: ₹{pendingAmounts[booking.id].toFixed(0)}
+                              Pending: ₹{Math.max(0, getTotalRentSoFar(selectedBooking) - getTotalPaidSoFar(selectedBooking))}
                             </div>
                           )}
                         </>
