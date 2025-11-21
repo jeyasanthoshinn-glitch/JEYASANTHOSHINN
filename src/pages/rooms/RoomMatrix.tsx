@@ -78,6 +78,9 @@ const RoomMatrix = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [stayValidUntil, setStayValidUntil] = useState<Record<string, string>>({});
   const [pendingAmounts, setPendingAmounts] = useState<Record<string, number>>({});
+  const [cleaningConfirmModal, setCleaningConfirmModal] = useState(false);
+  const [cleaningRoom, setCleaningRoom] = useState<Room | null>(null);
+  const [processingCleaning, setProcessingCleaning] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -726,19 +729,8 @@ const RoomMatrix = () => {
                         } else if (room.status === 'available') {
                           navigate(`/check-in/${room.id}`);
                         } else if (room.status === 'cleaning') {
-                          const confirmed = window.confirm('Is cleaning completed?');
-                          if (confirmed) {
-                            try {
-                              await updateDoc(doc(db, 'rooms', room.id), {
-                                status: 'available',
-                              });
-                              toast.success(`Room ${room.roomNumber} marked as available`);
-                              fetchData();
-                            } catch (error) {
-                              toast.error('Failed to update room status');
-                              console.error(error);
-                            }
-                          }
+                          setCleaningRoom(room);
+                          setCleaningConfirmModal(true);
                         } else {
                           navigate(`/rooms/edit/${room.id}`);
                         }
@@ -767,9 +759,8 @@ const RoomMatrix = () => {
                           </div>
                           {pendingAmounts[booking.id] > 0 && (
                             <div className="mt-1 text-xs font-semibold text-red-600">
-                              Pending: ₹{Math.max(0, getTotalRentSoFar(selectedBooking) - getTotalPaidSoFar(selectedBooking))}
+                              Pending: ₹{Math.max(0, pendingAmounts[booking.id])}
                             </div>
-            
                           )}
                         </>
                       )}
@@ -885,6 +876,67 @@ const RoomMatrix = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {cleaningConfirmModal && cleaningRoom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full"
+          >
+            <h2 className="text-xl font-bold mb-4">Confirm Cleaning Completion</h2>
+
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-gray-700">
+                Mark <strong>Room {cleaningRoom.roomNumber}</strong> as available after cleaning?
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setCleaningConfirmModal(false);
+                  setCleaningRoom(null);
+                }}
+                disabled={processingCleaning}
+                className="flex-1 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setProcessingCleaning(true);
+                  try {
+                    await updateDoc(doc(db, 'rooms', cleaningRoom.id), {
+                      status: 'available',
+                    });
+                    toast.success(`Room ${cleaningRoom.roomNumber} marked as available`);
+                    setCleaningConfirmModal(false);
+                    setCleaningRoom(null);
+                    fetchData();
+                  } catch (error) {
+                    toast.error('Failed to update room status');
+                    console.error(error);
+                  } finally {
+                    setProcessingCleaning(false);
+                  }
+                }}
+                disabled={processingCleaning}
+                className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              >
+                {processingCleaning ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </>
+                ) : (
+                  'Confirm Cleaning'
+                )}
+              </button>
             </div>
           </motion.div>
         </div>
