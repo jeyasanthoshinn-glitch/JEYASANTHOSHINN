@@ -467,12 +467,11 @@ const BookedRooms: React.FC = () => {
                   <div className="flex flex-col pt-2 border-t md:border-t-0 md:border-l md:pl-4">
                     <span className="text-gray-600">Total Rent:</span>
                     <span className="font-medium">₹{(() => {
+                      // customer.rent already includes base rent + extensions + extra fees
+                      // We only need to add shop purchases from the transactions
                       let totalRent = selectedCustomer.rent;
-                      paymentHistory.forEach(p => {
-                        if (p.type === 'extension' || p.type === 'extra-fee' || p.type === 'shop-purchase') {
-                          totalRent += Math.abs(p.amount);
-                        }
-                      });
+                      const shopPurchaseTotal = getTotalShopPurchases;
+                      totalRent += shopPurchaseTotal;
                       return totalRent.toFixed(2);
                     })()}</span>
                   </div>
@@ -489,12 +488,12 @@ const BookedRooms: React.FC = () => {
                   <div className="flex flex-col">
                     <span className="text-gray-600">Pending:</span>
                     <span className="font-medium text-red-600">₹{(() => {
+                      // customer.rent already includes base rent + extensions + extra fees
+                      // We only need to add shop purchases
                       let totalRent = selectedCustomer.rent;
-                      paymentHistory.forEach(p => {
-                        if (p.type === 'extension' || p.type === 'extra-fee' || p.type === 'shop-purchase') {
-                          totalRent += Math.abs(p.amount);
-                        }
-                      });
+                      const shopPurchaseTotal = getTotalShopPurchases;
+                      totalRent += shopPurchaseTotal;
+
                       const cashGpayPayments = paymentHistory.filter(entry =>
                         (entry.type === 'initial' || entry.type === 'advance') &&
                         (entry.mode === 'cash' || entry.mode === 'gpay')
