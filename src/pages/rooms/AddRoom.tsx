@@ -8,7 +8,6 @@ import { toast } from 'react-toastify';
 type RoomFormData = {
   roomNumber: string;
   floor: string;
-  type: 'ac' | 'non-ac' | 'house';
 };
 
 const AddRoom = () => {
@@ -21,6 +20,7 @@ const AddRoom = () => {
         ...data,
         roomNumber: String(data.roomNumber),
         floor: String(data.floor),
+        type: 'standard',
         status: 'available' as const,
         createdAt: new Date()
       };
@@ -71,22 +71,6 @@ const AddRoom = () => {
               <p className="mt-1 text-sm text-red-600">{errors.floor.message}</p>
             )}
           </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Room Type</label>
-              <select
-                {...register('type', { required: 'Room type is required' })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="">Select type</option>
-                <option value="ac">AC</option>
-                <option value="non-ac">Non-AC</option>
-                <option value="house">House</option>
-              </select>
-              {errors.type && (
-                <p className="mt-1 text-sm text-red-600">{errors.type.message}</p>
-              )}
-            </div>
-          
         </div>
 
         {/* Buttons */}

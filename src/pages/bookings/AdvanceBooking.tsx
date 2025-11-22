@@ -22,9 +22,11 @@ const AdvanceBooking = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    const textFields = ['name', 'mobile', 'aadhar'];
+    const processedValue = textFields.includes(name) ? value.toUpperCase() : value;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'numberOfRooms' ? parseInt(value) || 1 : value
+      [name]: name === 'numberOfRooms' ? parseInt(value) || 1 : processedValue
     }));
   };
 
@@ -115,7 +117,7 @@ const AdvanceBooking = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
                     placeholder="Enter guest name"
                     required
                   />
@@ -130,7 +132,7 @@ const AdvanceBooking = () => {
                     name="mobile"
                     value={formData.mobile}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
                     placeholder="Enter mobile number"
                     pattern="[0-9]{10}"
                     required
@@ -146,7 +148,7 @@ const AdvanceBooking = () => {
                     name="aadhar"
                     value={formData.aadhar}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
                     placeholder="Enter Aadhar number"
                     required
                   />
@@ -192,6 +194,7 @@ const AdvanceBooking = () => {
                     min="1"
                     value={formData.numberOfRooms}
                     onChange={handleChange}
+                    onWheel={(e) => e.currentTarget.blur()}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     required
                   />
@@ -208,6 +211,7 @@ const AdvanceBooking = () => {
                     step="0.01"
                     value={formData.pricePerRoom}
                     onChange={handleChange}
+                    onWheel={(e) => e.currentTarget.blur()}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="Enter price per room"
                     required
@@ -225,6 +229,7 @@ const AdvanceBooking = () => {
                     step="0.01"
                     value={formData.advanceAmount}
                     onChange={handleChange}
+                    onWheel={(e) => e.currentTarget.blur()}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="Enter advance amount"
                     required
