@@ -224,7 +224,9 @@ const RoomMatrix = () => {
         const shopTotal = purchases.reduce((sum, p) => sum + (p.amount || 0), 0);
         totalRent += shopTotal;
 
-        const totalPaid = booking.initialPayment || 0;
+        const totalPaid = payments
+          .filter(p => (p.type === 'initial' || p.type === 'advance') && (p.mode === 'cash' || p.mode === 'gpay'))
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
 
         pending[booking.id] = Math.max(0, totalRent - totalPaid);
       });
