@@ -224,6 +224,7 @@ const RoomMatrix = () => {
         const shopTotal = purchases.reduce((sum, p) => sum + (p.amount || 0), 0);
         totalRent += shopTotal;
 
+        // Calculate total paid from actual payment records (initial + advance payments)
         const totalPaid = booking.initialPayment || 0;
 
         pending[booking.id] = Math.max(0, totalRent - totalPaid);
@@ -363,7 +364,7 @@ const RoomMatrix = () => {
 
   const processPayment = async (bookingId: string) => {
     if (!paymentMode || !paymentAmount) return;
-    
+
     const amount = parseFloat(paymentAmount);
 
     try {
@@ -373,11 +374,12 @@ const RoomMatrix = () => {
         mode: paymentMode,
         type: 'advance',
         timestamp: Timestamp.now(),
+        description: 'Additional payment'
       });
-
-      await updateDoc(doc(db, 'checkins', bookingId), {
-        initialPayment: increment(amount),
-      });
+      
+      // await updateDoc(doc(db, 'checkins', bookingId), {
+      //   initialPayment: increment(amount),
+      // });
 
       toast.success('Payment added successfully');
       setShowPaymentModal(false);
